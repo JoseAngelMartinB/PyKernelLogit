@@ -1,6 +1,9 @@
+# -*- coding: utf-8 -*-
 """
-This module provides a general "estimate" function and EstimationObj class for
-pylogit's logit-type models.
+@author:    Timothy Brathwaite
+            José Ángel Martín Baos
+@summary:   This module provides a general "estimate" function and EstimationObj
+            class for pylogit's logit-type models.
 """
 from __future__ import absolute_import
 
@@ -12,7 +15,7 @@ from scipy.optimize import minimize
 
 from . import choice_calcs as cc
 from .choice_calcs import create_matrix_block_indices
-from .choice_tools import ensure_ridge_is_scalar_or_none
+from .choice_tools import ensure_PMLE_lambda_is_scalar_or_none
 from .choice_tools import ensure_contiguity_in_observation_rows
 
 
@@ -55,11 +58,14 @@ class EstimationObj(object):
         format dataframe to various other objects such as the available
         alternatives, the unique observations, etc. The keys that it must have
         are `['rows_to_obs', 'rows_to_alts', 'chosen_row_to_obs']`
-    ridge : int, float, long, or None.
-            Determines whether or not ridge regression is performed. If a
-            scalar is passed, then that scalar determines the ridge penalty for
-            the optimization. The scalar should be greater than or equal to
-            zero..
+    PMLE: None or string value: ['LASSO', 'RIDGE' or 'Tikhonov']
+        It determines if a Penalized Maximum Likelihood Estimation should be
+        executed. The value of the parameter determines the type of PMLE. The
+        None value states that no PMLE is executed. Default = None.
+    PMLE_lambda : int, float, long, or None, optional.
+        Lambda parameter for LASSO or ridge regression. It should be an int,
+        float or long and determines the penalty for the optimization.
+        Default = 0.
     zero_vector : 1D ndarray.
         Determines what is viewed as a "null" set of parameters. It is
         explicitly passed because some parameters (e.g. parameters that must be
@@ -87,7 +93,8 @@ class EstimationObj(object):
     def __init__(self,
                  model_obj,
                  mapping_dict,
-                 ridge,
+                 PMLE,
+                 PMLE_lambda,
                  zero_vector,
                  split_params,
                  constrained_pos=None,
@@ -107,15 +114,16 @@ class EstimationObj(object):
         self.rows_to_nests = mapping_dict["rows_to_nests"]
         self.rows_to_mixers = mapping_dict["rows_to_mixers"]
 
-        # Perform necessary checking of ridge parameter here!
-        ensure_ridge_is_scalar_or_none(ridge)
+        # Perform necessary checking of PMLE_lambda parameter here!
+        ensure_PMLE_lambda_is_scalar_or_none(PMLE_lambda)
         # Ensure the dataset has contiguity in rows with the same obs_id
         ensure_contiguity_in_observation_rows(self.obs_id_vector)
         # Ensure the weights are appropriate for model estimation
         ensure_positivity_and_length_of_weights(weights, model_obj.data)
 
-        # Store the ridge parameter
-        self.ridge = ridge
+        # Store the PMLE and PMLE_lambda parameter
+        self.PMLE = PMLE
+        self.PMLE_lambda = PMLE_lambda
 
         # Store the constrained parameters
         self.constrained_pos = constrained_pos
@@ -251,11 +259,14 @@ class LogitTypeEstimator(EstimationObj):
         format dataframe to various other objects such as the available
         alternatives, the unique observations, etc. The keys that it must have
         are `['rows_to_obs', 'rows_to_alts', 'chosen_row_to_obs']`
-    ridge : int, float, long, or None.
-            Determines whether or not ridge regression is performed. If a
-            scalar is passed, then that scalar determines the ridge penalty for
-            the optimization. The scalar should be greater than or equal to
-            zero..
+    PMLE: None or string value: ['LASSO', 'RIDGE' or 'Tikhonov']
+        It determines if a Penalized Maximum Likelihood Estimation should be
+        executed. The value of the parameter determines the type of PMLE. The
+        None value states that no PMLE is executed. Default = None.
+    PMLE_lambda : int, float, long, or None, optional.
+        Lambda parameter for LASSO or ridge regression. It should be an int,
+        float or long and determines the penalty for the optimization.
+        Default = 0.
     zero_vector : 1D ndarray.
         Determines what is viewed as a "null" set of parameters. It is
         explicitly passed because some parameters (e.g. parameters that must be
@@ -289,7 +300,8 @@ class LogitTypeEstimator(EstimationObj):
     def __init__(self,
                  model_obj,
                  mapping_dict,
-                 ridge,
+                 PMLE,
+                 PMLE_lambda,
                  zero_vector,
                  split_params,
                  constrained_pos=None,
@@ -299,7 +311,8 @@ class LogitTypeEstimator(EstimationObj):
                   "weights": weights}
         super(LogitTypeEstimator, self).__init__(model_obj,
                                                  mapping_dict,
-                                                 ridge,
+                                                 PMLE,
+                                                 PMLE_lambda,
                                                  zero_vector,
                                                  split_params,
                                                  **kwargs)
@@ -344,7 +357,8 @@ class LogitTypeEstimator(EstimationObj):
 
         kwargs = {"intercept_params": intercepts,
                   "shape_params": shapes,
-                  "ridge": self.ridge,
+                  "PMLE": self.PMLE,
+                  "PMLE_lambda": self.PMLE_lambda,
                   "weights": self.weights}
         log_likelihood = cc.calc_log_likelihood(*args, **kwargs)
 
@@ -368,7 +382,8 @@ class LogitTypeEstimator(EstimationObj):
                 self.calc_dh_d_alpha,
                 intercepts,
                 shapes,
-                self.ridge,
+                self.PMLE,
+                self.PMLE_lambda,
                 self.weights]
 
         return cc.calc_gradient(*args)
@@ -391,7 +406,8 @@ class LogitTypeEstimator(EstimationObj):
                 self.block_matrix_idxs,
                 intercepts,
                 shapes,
-                self.ridge,
+                self.PMLE,
+                self.PMLE_lambda,
                 self.weights]
 
         return cc.calc_hessian(*args)
@@ -415,7 +431,8 @@ class LogitTypeEstimator(EstimationObj):
                 self.calc_dh_d_alpha,
                 intercepts,
                 shapes,
-                self.ridge,
+                self.PMLE,
+                self.PMLE_lambda,
                 self.weights]
 
         return cc.calc_fisher_info_matrix(*args)
@@ -674,7 +691,11 @@ def estimate(init_values,
             sys.stdout.flush()
 
     # Get the hessian fucntion for this estimation process
-    hess_func = estimator.calc_neg_hessian if use_hessian else None
+    hess_func = None
+    if use_hessian and method in ['Newton-CG', 'dogleg', 'trust-ncg',
+                                  'trust-krylov', 'trust-exact',
+                                  'trust-constr']:
+        hess_func = estimator.calc_neg_hessian
 
     # Estimate the actual parameters of the model
     start_time = time.time()

@@ -5,6 +5,7 @@ Created on Mon Feb 22 08:32:48 2016
 @module:    choice_tools.py
 @name:      Helpful Tools for Choice Model Estimation
 @author:    Timothy Brathwaite
+            José Ángel Martín Baos
 @summary:   Contains functions that help prepare one's data for choice model
             estimation or helps speed the estimation process (the 'mappings').
 """
@@ -15,6 +16,7 @@ from numbers import Number
 
 import numpy as np
 import pandas as pd
+import random
 
 from scipy.sparse import csr_matrix
 from scipy.sparse import issparse
@@ -560,23 +562,23 @@ def check_type_and_values_of_alt_name_dict(alt_name_dict, alt_id_col, df):
     return None
 
 
-def ensure_ridge_is_scalar_or_none(ridge):
+def ensure_PMLE_lambda_is_scalar_or_none(PMLE_lambda):
     """
-    Ensures that `ridge` is either None or a scalar value. Raises a helpful
+    Ensures that `PMLE_lambda` is a scalar value. Raises a helpful
     TypeError otherwise.
 
     Parameters
     ----------
-    ridge : int, float, long, or None.
-        Scalar value or None, determining the L2-ridge regression penalty.
+    PMLE_lambda : int, float or long
+        Scalar value determining the PMLE penalty for the regression.
 
     Returns
     -------
     None.
     """
-    if (ridge is not None) and not isinstance(ridge, Number):
-        msg_1 = "ridge should be None or an int, float, or long."
-        msg_2 = "The passed value of ridge had type: {}".format(type(ridge))
+    if not isinstance(PMLE_lambda, Number):
+        msg_1 = "PMLE_lambda should be an int, float, or long."
+        msg_2 = "The passed value of PMLE_lambda had type: {}".format(type(PMLE_lambda))
         raise TypeError(msg_1 + msg_2)
 
     return None
@@ -699,8 +701,13 @@ def create_design_matrix(long_form,
                     # Create the column name
                     var_names.append("{}_{}".format(variable, group))
 
+
+    design_matrix_as_list = []
+    for x in independent_vars:
+        design_matrix_as_list.append(x[:, None])
+
     # Create the final design matrix
-    design_matrix = np.hstack((x[:, None] for x in independent_vars))
+    design_matrix = np.hstack(design_matrix_as_list)
 
     # Use the list of names passed by the user, if the user passed such a list
     if names is not None:
@@ -1108,7 +1115,7 @@ def convert_long_to_wide(long_data,
     num_alts = long_data[alt_id_col].unique().shape[0]
 
     ############
-    # Calculate the needed number of colums
+    # Calculate the needed number of columns
     ############
     # For each observation, there is at least one column-- the observation id,
     num_cols = 1
@@ -1518,6 +1525,20 @@ def convert_wide_to_long(wide_data,
         contain one column per variable in `ind_vars`. Will contain one column
         per key in `alt_specific_vars`.
     """
+
+    # Avoid to modify the original dataframe
+    wide_data = wide_data.copy()
+
+    list_availability_vars = list(availability_vars.values())
+    # Allow to specify that an alternative is available to all decision-makers
+    # It creates a dummy variable to specify that all alternatives are available
+    # for all individuals.
+    if 'available_for_all' in list_availability_vars:
+        wide_data["available_for_all"] = 1
+    # Allow to specify that an alternative isn't available to any decision-maker
+    if 'available_for_none' in list_availability_vars:
+        wide_data["available_for_none"] = 0
+
     ##########
     # Check that all columns of wide_data are being
     # used in the conversion to long format
@@ -1527,9 +1548,9 @@ def convert_wide_to_long(wide_data,
         all_alt_specific_cols.extend(var_dict.values())
 
     vars_accounted_for = set(ind_vars +
-                             # converto list explicitly to support
+                             # conver to list explicitly to support
                              # both python 2 and 3
-                             list(availability_vars.values()) +
+                             list_availability_vars +
                              [obs_id_col, choice_col] +
                              all_alt_specific_cols)
     num_vars_accounted_for = len(vars_accounted_for)
@@ -1608,7 +1629,7 @@ def convert_wide_to_long(wide_data,
     num_rows = wide_data[sorted_availability_cols].sum(axis=0).sum()
 
     #####
-    # Calculate the needed number of colums
+    # Calculate the needed number of columns
     #####
     # For each observation, there is at least one column-- the observation id,
     num_cols = 1
@@ -1758,3 +1779,153 @@ def convert_mixing_names_to_positions(mixing_names, ind_var_names):
          the elements in mixing name, in the `ind_var_names` list.
     """
     return [ind_var_names.index(name) for name in mixing_names]
+
+
+def divide_long_train_test(long_data,
+                           train_size,
+                           obs_id_col,
+                           random_state=None):
+    """
+    Divides a long-format DataFrame into a train and test set.
+
+    Parameters
+    ----------
+    long_data : pandas dataframe.
+        Contains one row for each available alternative for each observation.
+        Should have the specified `[obs_id_col, alt_id_col, choice_col]` column
+        headings. The dtypes of all columns should be numeric.
+    train_size : float.
+        Indicates the relative size of the train set. It should be a value in
+        the range (0, 1).
+    obs_id_col : str.
+        Denotes the column in `long_data` that contains the observation ID
+        values for each row.
+    random_state : int or None.
+        Is the seed used by the random number generator.
+
+    Returns
+    -------
+    tuple.
+        Tuple of two pandas dataframe. The first ones contains the train set and
+        the second one contains the test set.
+    """
+
+    if not isinstance(long_data, pd.DataFrame):
+        msg = "The input variable long_data must be a Pandas DataFrame."
+        raise ValueError(msg)
+
+    if train_size <= 0 or train_size >= 1:
+        msg_1 = "The train_size defined is not valid."
+        msg_2 = "train_size should be a value in the range (0, 1)."
+        msg_3 = "The passed train_size was: {}".format(train_size)
+        total_msg = "\n".join([msg_1, msg_2, msg_3])
+        raise ValueError(total_msg)
+
+    # Obtain all the observations from the long format dataframe
+    obs = long_data[obs_id_col].unique()
+    n_obs = long_data[obs_id_col].nunique()
+
+    # Calculate the number of observations for train and test dataframes
+    n_train = int(np.round(n_obs * train_size, decimals=0))
+    n_test = n_obs - n_train
+    # Divide all the dataframe indices between train and test
+    np.random.seed(random_state)
+    train_obs = list(np.random.choice(obs, size=n_train, replace=False))
+    test_obs = [x for x in obs if x not in train_obs]
+    # Shuffle test indices (train indices are shuffled when random is applied)
+    random.Random(random_state).shuffle(test_obs)
+
+    # Generate the train and test dataframes
+    train_set = long_data[long_data[obs_id_col].isin(train_obs)].copy()
+    test_set = long_data[long_data[obs_id_col].isin(test_obs)].copy()
+
+    return (train_set, test_set)
+
+
+def KFold_cross_val(long_data,
+                    obs_id_col,
+                    n_splits=5,
+                    shuffle=False,
+                    random_state=None):
+    """
+    K-Folds cross-validator.
+
+    Provides train/test indices to split data in train/test sets. Split
+    dataset into k consecutive folds (without shuffling by default).
+
+    Parameters
+    ----------
+    long_data : pandas dataframe.
+        Contains one row for each available alternative for each observation.
+        Should have the specified `[obs_id_col, alt_id_col, choice_col]` column
+        headings. The dtypes of all columns should be numeric.
+    obs_id_col : str.
+        Denotes the column in `data` that contains the observation ID
+        values for each row.
+    n_splits : int, optional.
+        Number of folds. Must be at least 2. Default == 5.
+    shuffle : boolean, optional.
+        Whether to shuffle the data before splitting it into batches.
+        Default == False.
+    random_state : int or None, optional.
+        If int, random_state is the seed used by the random number generator.
+        Default == None.
+
+    Yields
+    -------
+    train_set : pandas dataframe.
+        The training long format pandas dataframe for that split.
+    test_set : pandas dataframe.
+        The testing long format pandas dataframe for that split.
+    """
+    if not isinstance(n_splits, int):
+        msg_1 = "The number of folds must be of Integral type."
+        msg_2 = "%s of type %s was passed."  % (n_splits, type(n_splits))
+        total_msg = " ".join([msg_1, msg_2])
+        raise ValueError(total_msg)
+
+    if n_splits <= 1:
+        msg_1 = "Error! k-fold cross-validation requires at least one"
+        msg_2 = "train/test split by setting n_splits=2 or more,"
+        msg_3 = "got n_splits={0}.".format(n_splits)
+        total_msg = " ".join([msg_1, msg_2, msg_3])
+        raise ValueError(total_msg)
+
+    # Obtain all the observations from the long format dataframe
+    obs = long_data[obs_id_col].unique()
+    n_obs = long_data[obs_id_col].nunique()
+
+    if n_splits > n_obs:
+        msg_1 = "Cannot have number of splits n_splits={0}".format(n_splits)
+        msg_2 = "greater than the number of different"
+        msg_3 = "observations: n_observations={0}".format(n_obs)
+        total_msg = " ".join([msg_1, msg_2, msg_3])
+        raise ValueError(total_msg)
+
+    indices = np.arange(n_obs)
+    if shuffle:
+        random.Random(random_state).shuffle(indices)
+
+    # Calculate the size for each fold
+    fold_sizes = np.full(n_splits, n_obs // n_splits, dtype=np.int)
+    fold_sizes[:n_obs % n_splits] += 1
+
+    current = 0
+    for fold_size in fold_sizes:
+        start, stop = current, current + fold_size
+        fold_obs = indices[start:stop]
+        current = stop
+
+        test_mask = np.zeros(n_obs, dtype=np.bool)
+        test_mask[fold_obs] = True
+
+        train_indices = indices[np.logical_not(test_mask)]
+        test_indices = indices[test_mask]
+
+        train_obs = obs[train_indices]
+        test_obs = obs[test_indices]
+
+        train_set = long_data[long_data[obs_id_col].isin(train_obs)].copy()
+        test_set = long_data[long_data[obs_id_col].isin(test_obs)].copy()
+
+        yield train_set, test_set

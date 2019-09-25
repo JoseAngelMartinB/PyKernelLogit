@@ -1,5 +1,7 @@
-Copyright (c) 2016, Timothy A. Brathwaite
+Copyright (c) 2019, José Ángel Martín Baos.
 All rights reserved.
+
+This software is based on the PyLogit package developed by Timothy A. Brathwaite
 
 Redistribution and use in source and binary forms, with or without
 modification, are permitted provided that the following conditions are met:

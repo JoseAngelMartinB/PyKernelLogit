@@ -4,6 +4,7 @@ Created on Thu Feb 25 07:19:49 2016
 
 @name:      MultiNomial Logit
 @author:    Timothy Brathwaite
+            José Ángel Martín Baos
 @summary:   Contains functions necessary for estimating multinomial logit
             models (with the help of the "base_multinomial_cm.py" file).
             Differs from version one since it works with the shape, intercept,
@@ -29,7 +30,7 @@ _msg_2 = "shape_names and shape_ref_pos will be ignored if passed."
 _shape_ignore_msg = _msg_1 + _msg_2
 
 # Create a warning string that will be issued if ridge regression is performed.
-_msg_3 = "NOTE: An L2-penalized regression is being performed. The "
+_msg_3 = "NOTE: A penalized regression is being performed. The "
 _msg_4 = "reported standard errors and robust standard errors "
 _msg_5 = "***WILL BE INCORRECT***."
 _ridge_warning_msg = _msg_3 + _msg_4 + _msg_5
@@ -145,11 +146,14 @@ class MNLEstimator(LogitTypeEstimator):
         format dataframe to various other objects such as the available
         alternatives, the unique observations, etc. The keys that it must have
         are `['rows_to_obs', 'rows_to_alts', 'chosen_row_to_obs']`
-    ridge : int, float, long, or None.
-            Determines whether or not ridge regression is performed. If a
-            scalar is passed, then that scalar determines the ridge penalty for
-            the optimization. The scalar should be greater than or equal to
-            zero..
+    PMLE: None or string value: ['LASSO', 'RIDGE' or 'Tikhonov']
+        It determines if a Penalized Maximum Likelihood Estimation should be
+        executed. The value of the parameter determines the type of PMLE. The
+        None value states that no PMLE is executed. Default = None.
+    PMLE_lambda : int, float, long, or None, optional.
+        Lambda parameter for LASSO or ridge regression. It should be an int,
+        float or long and determines the penalty for the optimization.
+        Default = 0.
     zero_vector : 1D ndarray.
         Determines what is viewed as a "null" set of parameters. It is
         explicitly passed because some parameters (e.g. parameters that must be
@@ -309,7 +313,8 @@ class MNL(base_mcm.MNDC_Model):
                 loss_tol=1e-06,
                 gradient_tol=1e-06,
                 maxiter=1000,
-                ridge=None,
+                PMLE=None,
+                PMLE_lambda=0,
                 constrained_pos=None,
                 just_point=False,
                 **kwargs):
@@ -334,10 +339,14 @@ class MNL(base_mcm.MNDC_Model):
         gradient_tol : float, optional.
             Determines the tolerance on the difference in gradient values from
             one iteration to the next which is needed to determine convergence.
-        ridge : int, float, long, or None, optional.
-            Determines whether or not ridge regression is performed. If a
-            scalar is passed, then that scalar determines the ridge penalty for
-            the optimization. Default `== None`.
+        PMLE: None or string value: ['LASSO', 'RIDGE' or 'Tikhonov']
+            It determines if a Penalized Maximum Likelihood Estimation should be
+            executed. The value of the parameter determines the type of PMLE. The
+            None value states that no PMLE is executed. Default = None.
+        PMLE_lambda : int, float, long, or None, optional.
+            Lambda parameter for LASSO or ridge regression. It should be an int,
+            float or long and determines the penalty for the optimization.
+            Default = 0.
         constrained_pos : list or None, optional.
             Denotes the positions of the array of estimated parameters that are
             not to change from their initial values. If a list is passed, the
@@ -363,14 +372,11 @@ class MNL(base_mcm.MNDC_Model):
             msg_2 = "Remove such kwargs and pass a single init_vals argument"
             raise ValueError(msg.format(kwargs_to_be_ignored) + msg_2)
 
-        if ridge is not None:
+        if PMLE is not None:
             warnings.warn(_ridge_warning_msg)
 
         # Store the optimization method
         self.optimization_method = method
-
-        # Store the ridge parameter
-        self.ridge_param = ridge
 
         # Construct the mappings from alternatives to observations and from
         # chosen alternatives to observations
@@ -380,7 +386,8 @@ class MNL(base_mcm.MNDC_Model):
         zero_vector = np.zeros(init_vals.shape)
         mnl_estimator = MNLEstimator(self,
                                      mapping_res,
-                                     ridge,
+                                     PMLE,
+                                     PMLE_lambda,
                                      zero_vector,
                                      split_param_vec,
                                      constrained_pos=constrained_pos)

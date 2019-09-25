@@ -5,9 +5,11 @@ Created on Sun Feb 28 09:12:36 2016
 @module:    choice_calcs.py
 @name:      Choice Calculations
 @author:    Timothy Brathwaite
+            José Ángel Martín Baos
 @summary:   Contains generic functions necessary for calculating choice
             probabilities and for estimating the choice models.
 """
+
 import numpy as np
 import scipy.stats
 import scipy.linalg
@@ -89,7 +91,7 @@ def calc_probabilities(beta,
         probability of the realized outcome of the given observation.
         Default == None.
     return_long_probs :  bool, optional.
-        Indicates whether or not the long format probabilites (a 1D numpy array
+        Indicates whether or not the long format probabilities (a 1D numpy array
         with one element per observation per available alternative) should be
         returned. Default == False.
 
@@ -196,7 +198,8 @@ def calc_log_likelihood(beta,
                         utility_transform,
                         intercept_params=None,
                         shape_params=None,
-                        ridge=None,
+                        PMLE=None,
+                        PMLE_lambda=0,
                         weights=None):
     """
     Parameters
@@ -234,14 +237,18 @@ def calc_log_likelihood(beta,
         If an array, each element should be an int, float, or long. For
         identifiability, there should be J- 1 elements where J is the total
         number of observed alternatives for this dataset. Default == None.
-    shape_params : 1D ndarray, or None, optional.
+    shape_params: 1D ndarray, or None, optional.
         If an array, each element should be an int, float, or long. There
         should be one value per shape parameter of the model being used.
         Default == None.
-    ridge : int, float, long, or None, optional.
-        Determines whether or not ridge regression is performed. If an int,
-        float or long is passed, then that scalar determines the ridge penalty
-        for the optimization. Default = None.
+    PMLE: None or string value: ['LASSO', 'RIDGE' or 'Tikhonov']
+        It determines if a Penalized Maximum Likelihood Estimation should be
+        executed. The value of the parameter determines the type of PMLE. The
+        None value states that no PMLE is executed. Default = None.
+    PMLE_lambda : int, float, long, or None, optional.
+        Lambda parameter for LASSO or ridge regression. It should be an int,
+        float or long and determines the penalty for the optimization.
+        Default = 0.
     weights : 1D ndarray or None, optional.
         Allows for the calculation of weighted log-likelihoods. The weights can
         represent various things. In stratified samples, the weights may be
@@ -273,7 +280,7 @@ def calc_log_likelihood(beta,
     # Calculate the log likelihood
     log_likelihood = choice_vector.dot(weights * np.log(long_probs))
 
-    if ridge is None:
+    if PMLE is None:
         return log_likelihood
     else:
         param_list = [x for x in [shape_params, intercept_params, beta]
@@ -282,7 +289,28 @@ def calc_log_likelihood(beta,
             params = np.concatenate(param_list, axis=0)
         else:
             params = param_list[0]
-        return log_likelihood - ridge * np.square(params).sum()
+
+        if PMLE == "LASSO":
+            return log_likelihood - PMLE_lambda * np.absolute(params).sum()
+
+        elif PMLE == "RIDGE":
+            return log_likelihood - PMLE_lambda * np.square(params).sum()
+
+        elif PMLE == "Tikhonov":
+            # TODO: Not implemented.
+            msg = "Tikhonov Penalized Maximum Likelihood Estimation is not yet"
+            msg_2 = "implemented. It would be available in a future version."
+            msg_3 = "\nUse another PMLE type instead or None for no PMLE."
+            total_msg = " ".join([msg_1, msg_2, msg_3])
+            raise ValueError(total_msg)
+
+        else:
+            msg_1 = "Error! {} is not a valid value for PMLE.\n".format(PMLE)
+            msg_2 = "Penalized Maximum Likelihood Estimation (MPLE) only"
+            msg_3 = "implements methods: 'LASSO', 'RIDGE' and 'Tikhonov' (only"
+            msg_4 = "for kernel models)."
+            total_msg = " ".join([msg_1, msg_2, msg_3])
+            raise ValueError(total_msg)
 
 
 def calc_gradient(beta,
@@ -297,7 +325,8 @@ def calc_gradient(beta,
                   transform_deriv_alpha,
                   intercept_params,
                   shape_params,
-                  ridge,
+                  PMLE,
+                  PMLE_lambda,
                   weights):
     """
     Parameters
@@ -364,10 +393,14 @@ def calc_gradient(beta,
        If an array, each element should be an int, float, or long. There should
        be one value per shape parameter of the model being used.
        Default == None.
-    ridge : int, float, long, or None.
-        Determines whether or not ridge regression is performed. If an int,
-        float or long is passed, then that scalar determines the ridge penalty
-        for the optimization. Default = None.
+    PMLE: None or string value: ['LASSO', 'RIDGE' or 'Tikhonov']
+        It determines if a Penalized Maximum Likelihood Estimation should be
+        executed. The value of the parameter determines the type of PMLE. The
+        None value states that no PMLE is executed. Default = None.
+    PMLE_lambda : int, float, long, or None, optional.
+        Lambda parameter for LASSO or ridge regression. It should be an int,
+        float or long and determines the penalty for the optimization.
+        Default = 0.
     weights : 1D ndarray or None.
         Allows for the calculation of weighted log-likelihoods. The weights can
         represent various things. In stratified samples, the weights may be
@@ -478,8 +511,28 @@ def calc_gradient(beta,
         gradient = d_ll_d_beta.ravel()
         params = beta
 
-    if ridge is not None:
-        gradient -= 2 * ridge * params
+    if PMLE is not None:
+        if PMLE == "LASSO":
+            gradient -= 2 * PMLE_lambda * np.sign(params)
+
+        elif PMLE == "RIDGE":
+            gradient -= 2 * PMLE_lambda * params
+
+        elif PMLE == "Tikhonov":
+            # TODO: Not implemented.
+            msg = "Tikhonov Penalized Maximum Likelihood Estimation is not yet"
+            msg_2 = "implemented. It would be available in a future version."
+            msg_3 = "\nUse another PMLE type instead or None for no PMLE."
+            total_msg = " ".join([msg_1, msg_2, msg_3])
+            raise ValueError(total_msg)
+
+        else:
+            msg_1 = "Error! {} is not a valid value for PMLE.\n".format(PMLE)
+            msg_2 = "Penalized Maximum Likelihood Estimation (MPLE) only"
+            msg_3 = "implements methods: 'LASSO', 'RIDGE' and 'Tikhonov' (only"
+            msg_4 = "for kernel models)."
+            total_msg = " ".join([msg_1, msg_2, msg_3])
+            raise ValueError(total_msg)
 
     return gradient
 
@@ -610,7 +663,8 @@ def calc_hessian(beta,
                  block_matrix_idxs,
                  intercept_params,
                  shape_params,
-                 ridge,
+                 PMLE,
+                 PMLE_lambda,
                  weights):
     """
     Parameters
@@ -672,10 +726,14 @@ def calc_hessian(beta,
         If an array, each element should be an int, float, or long. There
         should be one value per shape parameter of the model being used.
         Default == None.
-    ridge : int, float, long, or None.
-        Determines whether or not ridge regression is performed. If an int,
-        float or long is passed, then that scalar determines the ridge penalty
-        for the optimization. Default = None.
+    PMLE: None or string value: ['LASSO', 'RIDGE' or 'Tikhonov']
+        It determines if a Penalized Maximum Likelihood Estimation should be
+        executed. The value of the parameter determines the type of PMLE. The
+        None value states that no PMLE is executed. Default = None.
+    PMLE_lambda : int, float, long, or None, optional.
+        Lambda parameter for LASSO or ridge regression. It should be an int,
+        float or long and determines the penalty for the optimization.
+        Default = 0.
     weights : 1D ndarray or None.
         Allows for the calculation of weighted log-likelihoods. The weights can
         represent various things. In stratified samples, the weights may be
@@ -844,8 +902,29 @@ def calc_hessian(beta,
     else:
         hess = d2_ll_db2
 
-    if ridge is not None:
-        hess -= 2 * ridge
+    if PMLE is not None:
+        if PMLE == "LASSO":
+            # Do nothing because the expression should be hess -= 0
+            pass
+
+        elif PMLE == "RIDGE":
+            hess -= 2 * PMLE_lambda
+
+        elif PMLE == "Tikhonov":
+            # TODO: Not implemented.
+            msg = "Tikhonov Penalized Maximum Likelihood Estimation is not yet"
+            msg_2 = "implemented. It would be available in a future version."
+            msg_3 = "\nUse another PMLE type instead or None for no PMLE."
+            total_msg = " ".join([msg_1, msg_2, msg_3])
+            raise ValueError(total_msg)
+
+        else:
+            msg_1 = "Error! {} is not a valid value for PMLE.\n".format(PMLE)
+            msg_2 = "Penalized Maximum Likelihood Estimation (MPLE) only"
+            msg_3 = "implements methods: 'LASSO', 'RIDGE' and 'Tikhonov' (only"
+            msg_4 = "for kernel models)."
+            total_msg = " ".join([msg_1, msg_2, msg_3])
+            raise ValueError(total_msg)
 
     # Make sure we are returning standard numpy arrays
     if isinstance(hess, np.matrixlib.defmatrix.matrix):
@@ -866,7 +945,8 @@ def calc_fisher_info_matrix(beta,
                             transform_deriv_alpha,
                             intercept_params,
                             shape_params,
-                            ridge,
+                            PMLE,
+                            PMLE_lambda,
                             weights):
     """
     Parameters
@@ -918,10 +998,14 @@ def calc_fisher_info_matrix(beta,
         If an array, each element should be an int, float, or long. There
         should be one value per shape parameter of the model being used.
         Default == None.
-    ridge : int, float, long, or None.
-        Determines whether or not ridge regression is performed. If an int,
-        float or long is passed, then that scalar determines the ridge penalty
-        for the optimization. Default = None.
+    PMLE: None or string value: ['LASSO', 'RIDGE' or 'Tikhonov']
+        It determines if a Penalized Maximum Likelihood Estimation should be
+        executed. The value of the parameter determines the type of PMLE. The
+        None value states that no PMLE is executed. Default = None.
+    PMLE_lambda : int, float, long, or None, optional.
+        Lambda parameter for LASSO or ridge regression. It should be an int,
+        float or long and determines the penalty for the optimization.
+        Default = 0.
     weights : 1D ndarray or None.
         Allows for the calculation of weighted log-likelihoods. The weights can
         represent various things. In stratified samples, the weights may be
@@ -1020,12 +1104,37 @@ def calc_fisher_info_matrix(beta,
     fisher_matrix =\
         gradient_vec.T.dot(np.multiply(weights_per_obs[:, None], gradient_vec))
 
-    if ridge is not None:
-        # The rational behind adding 2 * ridge is that the fisher information
-        # matrix should approximate the hessian and in the hessian we add
-        # 2 * ridge at the end. I don't know if this is the correct way to
-        # calculate the Fisher Information in ridge regression models.
-        fisher_matrix -= 2 * ridge
+    if PMLE is not None:
+        if PMLE == "LASSO":
+            # Do nothing because the expression should be fisher_matrix -= 0
+            # The rational behind adding 0 is that the fisher information
+            # matrix should approximate the hessian and in the hessian we add
+            # 0 at the end. I don't know if this is the correct way to
+            # calculate the Fisher Information in ridge regression models.
+            pass
+
+        elif PMLE == "RIDGE":
+            # The rational behind adding 2*ridge is that the fisher information
+            # matrix should approximate the hessian and in the hessian we add
+            # 2*ridge at the end. I don't know if this is the correct way to
+            # calculate the Fisher Information in ridge regression models.
+            fisher_matrix -= 2 * PMLE_lambda
+
+        elif PMLE == "Tikhonov":
+            # TODO: Not implemented.
+            msg = "Tikhonov Penalized Maximum Likelihood Estimation is not yet"
+            msg_2 = "implemented. It would be available in a future version."
+            msg_3 = "\nUse another PMLE type instead or None for no PMLE."
+            total_msg = " ".join([msg_1, msg_2, msg_3])
+            raise ValueError(total_msg)
+
+        else:
+            msg_1 = "Error! {} is not a valid value for PMLE.\n".format(PMLE)
+            msg_2 = "Penalized Maximum Likelihood Estimation (MPLE) only"
+            msg_3 = "implements methods: 'LASSO', 'RIDGE' and 'Tikhonov' (only"
+            msg_4 = "for kernel models)."
+            total_msg = " ".join([msg_1, msg_2, msg_3, msg_4])
+            raise ValueError(total_msg)
 
     return fisher_matrix
 

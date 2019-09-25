@@ -3,6 +3,7 @@
 Created on Tues Feb 22 09:30:44 2016
 
 @author: Timothy Brathwaite
+         José Ángel Martín Baos
 @notes:  Credit is due to Akshay Vij and John Canny for the idea of using
          "mapping" matrices to avoid the need for "for loops" when computing
          quantities of interest such as probabilities, log-likelihoods,
@@ -14,6 +15,7 @@ Created on Tues Feb 22 09:30:44 2016
 """
 from __future__ import absolute_import
 
+import warnings
 import pickle
 from copy import deepcopy
 from functools import reduce
@@ -501,7 +503,7 @@ def check_for_choice_col_based_on_return_long_probs(return_long_probs,
     Parameters
     ----------
     return_long_probs : bool.
-            Indicates whether or not the long format probabilites (a 1D numpy
+            Indicates whether or not the long format probabilities (a 1D numpy
             array with one element per observation per available alternative)
             should be returned.
     choice_col : str or None.
@@ -1517,7 +1519,8 @@ class MNDC_Model(object):
                 loss_tol=1e-06,
                 gradient_tol=1e-06,
                 maxiter=1000,
-                ridge=None,
+                PMLE=None,
+                PMLE_lambda=0,
                 *args):
         """
         Parameters
@@ -1541,10 +1544,14 @@ class MNDC_Model(object):
             Determines the tolerance on the difference in gradient values from
             one iteration to the next which is needed to determine convergence.
             Default == 1e-06.
-        ridge : int, float, long, or None, optional.
-            Determines whether or not ridge regression is performed. If an int,
-            float or long is passed, then that scalar determines the ridge
-            penalty for the optimization. Default == None.
+        PMLE: None or string value: ['LASSO', 'RIDGE' or 'Tikhonov']
+            It determines if a Penalized Maximum Likelihood Estimation should be
+            executed. The value of the parameter determines the type of PMLE. The
+            None value states that no PMLE is executed. Default = None.
+        PMLE_lambda : int, float, long, or None, optional.
+            Lambda parameter for LASSO or ridge regression. It should be an int,
+            float or long and determines the penalty for the optimization.
+            Default = 0.
 
         Returns
         -------
@@ -1808,7 +1815,7 @@ class MNDC_Model(object):
             contain the nest coefficients if there are any or None otherwise.
             Default == None.
         return_long_probs : bool, optional.
-            Indicates whether or not the long format probabilites (a 1D numpy
+            Indicates whether or not the long format probabilities (a 1D numpy
             array with one element per observation per available alternative)
             should be returned. Default == True.
         choice_col : str, optional.
@@ -1970,6 +1977,291 @@ class MNDC_Model(object):
                                       shape_params=new_shape_params,
                                       chosen_row_to_obs=new_chosen_to_obs,
                                       return_long_probs=return_long_probs)
+
+
+    def _dataframe_with_predictions(self, data):
+        """
+        For a given input long dataframe containing a set of observations, it
+        returns the same dataframe with two new columns, one with the predicted
+        probability for each alternative for each decision-maker, and another
+        with the predicted alternative for a given decision-maker (i.e. the one
+        with the highest associated probability).
+
+        Parameters
+        ----------
+        data : pandas dataframe.
+            The dataset in long format for which the probabilities of choosing
+            each alternative will be computed.
+
+        Returns
+        -------
+        predictions : pandas dataframe.
+            The input `data` datafame with two new columns:
+                - probability : It is a value between 0 and 1. It denotes the
+                    probability that the decison-maker chooses that alternative.
+                    The sum of the probabilities for all the alternatives for any
+                    decision-maker must be 1.
+                - predicted : An integer value 0 or 1. It takes the value 1 for
+                    the alternative which is predicted to be selected by a
+                    decion-maker.
+        """
+        # Check the validity of the parameters
+        ensure_columns_are_in_dataframe([self.obs_id_col,
+                                         self.alt_id_col,
+                                         self.choice_col],
+                                        data,
+                                        data_title='data')
+
+        predictions = data[[self.obs_id_col,
+                            self.alt_id_col,
+                            self.choice_col]].copy()
+        predictions['probability'] = self.predict(data)
+
+        # Get the index for the predited alternative for each observation
+        idx_higher_prob = predictions.groupby(self.obs_id_col)['probability'].\
+            transform(max) == predictions['probability']
+
+        # Append a new column to the dataframe which contains 1 if that
+        # alternative was predected by the model or 0 in other case
+        predictions['predicted'] = 0
+        predictions.loc[idx_higher_prob, 'predicted'] = 1
+
+        return predictions
+
+
+    def precision_recall_fscore(self,
+                                data,
+                                averaging=None,
+                                beta=1):
+        """
+        Returns the precision, recall and F-score metrics used to evaluate a
+        model.
+
+        Parameters
+        ----------
+        data : pandas dataframe.
+            The dataset in long format used to evaluate the model.
+        averaging : str or None, optional.
+            The type of averaging performed when computing the metrics.
+            If different to None, then a averaging is applied when computing the
+            precision, recall and F-score. It is mandatory for models with
+            more than two alternatives (multi-class classification). The types
+            of averaging performed on the data can be:
+                - micro : Calculate metrics globally by counting the total true
+                    positives, false negatives and false positives.
+                - macro : Calculate metrics for each label, and find their
+                    unweighted mean. This does not take label imbalance into
+                    account.
+            Default == None
+        beta : float, optional.
+            Weight of precision in harmonic mean.
+
+        Returns
+        -------
+        tuple.
+            Tuple composed of three element:
+                - precision : float
+                    The precision is the ratio ``tp / (tp + fp)`` where ``tp``
+                    is the number of true positives and ``fp`` the number of
+                    false positives. The precision is intuitively the ability of
+                    the classifier not to label as positive a sample that is
+                    negative.
+                - recall : float
+                    The recall is the ratio ``tp / (tp + fn)`` where ``tp`` is
+                    the number of true positives and ``fn`` the number of false
+                    negatives. The recall is intuitively the ability of the
+                    classifier to find all the positive samples.
+                - fscore : float
+                    The F-beta score is the weighted harmonic mean of precision
+                    and recall, reaching its optimal value at 1 and its worst
+                    value at 0.
+        """
+        # Check the validity of the parameters
+        ensure_columns_are_in_dataframe([self.obs_id_col,
+                                         self.alt_id_col,
+                                         self.choice_col],
+                                        data,
+                                        data_title='data')
+
+        if beta <= 0:
+            raise ValueError("beta parameter should be >0 in the F-beta score")
+
+        precision = None
+        recall = None
+        fscore = None
+
+        # List of different alternatives in data
+        alternatives = list(data[self.alt_id_col].unique())
+        # Total number of alternatives
+        n_alternatives = len(alternatives)
+
+        if n_alternatives == 1:
+            msg = "Error! Only one alternative is specified in the dataset."
+            raise ValueError(total_msg)
+
+        if n_alternatives == 2 and averaging is not None:
+            msg = "There is only two alternatives in the input dataset."
+            msg_2 = "Therefore, averaging variable should not be specified."
+            total_msg = " ".join([msg_1, msg_2])
+            warnings.warn(total_msg)
+
+        if (n_alternatives > 2 and averaging is None) \
+            or (n_alternatives > 2 and averaging not in ['micro', 'macro']):
+            msg_1 = "Error! This is a multiclass model with " +\
+                "{} different classes.".format(n_alternatives)
+            msg_2 = "averaging parameter should be provided."
+            msg_3 = "Valid values are: [micro, marco]."
+            total_msg = "\n".join([msg_1, msg_2, msg_3])
+            raise ValueError(total_msg)
+
+        # Get a dataframe with the predictions for each observation
+        predictions = self._dataframe_with_predictions(data)
+
+        # Create a contingency table for each alternative.
+        # Contingency_tables is a list containing for each alternative a tuple
+        # (tp, fp, fn, tn).
+        contingency_tables = []
+        for alt in alternatives:
+            # Calculate the true positives for the alternative
+            tp_alt = predictions[(predictions[self.alt_id_col] == alt) &\
+                (predictions['predicted'] == 1)][self.choice_col].sum()
+            # Calculate the false positives for the alternative
+            fp_alt = predictions[(predictions[self.alt_id_col] == alt) &\
+                (predictions['predicted'] == 1)][self.choice_col].count()-tp_alt
+            # Calculate the false negatives for the alternative
+            fn_alt = predictions[(predictions[self.alt_id_col] == alt) &\
+                (predictions['predicted'] == 0)][self.choice_col].sum()
+            # Calculate the true negatives for the alternative
+            tn_alt = predictions[(predictions[self.alt_id_col] == alt) &\
+                (predictions['predicted'] == 0)][self.choice_col].count()-fn_alt
+            # Append tp, fp, fn and tn to contingency_tables
+            contingency_tables.append((tp_alt, fp_alt, fn_alt, tn_alt))
+
+        if n_alternatives == 2:
+            elm = contingency_tables[0]
+            precision = elm[0]/(elm[0]+elm[1])
+            recall = elm[0]/(elm[0]+elm[2])
+            fscore = ((1+beta**2)*elm[0]) / ((1+beta**2)*elm[0] \
+                     + (beta**2)*elm[2] + elm[1])
+
+        elif averaging == "micro":
+            tp = 0
+            fp = 0
+            fn = 0
+            tn = 0
+            for elm in contingency_tables:
+                tp += elm[0]
+                fp += elm[1]
+                fn += elm[2]
+                tn += elm[3]
+            precision = tp/(tp+fp)
+            recall = tp/(tp+fn)
+            fscore = (1+beta**2)*precision*recall / ((beta**2)*precision+recall)
+
+        elif averaging == "macro":
+            precision_alt = 0
+            recall_alt = 0
+            for elm in contingency_tables:
+                precision_alt += elm[0]/(elm[0]+ elm[1])# tp_alt/(tp_alt+fp_alt)
+                recall_alt +=  elm[0]/( elm[0]+ elm[2]) # tp_alt/(tp_alt+fn_alt)
+            precision = precision_alt/n_alternatives
+            recall = recall_alt/n_alternatives
+            fscore = (1+beta**2)*precision*recall / ((beta**2)*precision+recall)
+
+        return (precision, recall, fscore)
+
+
+    def confusion_matrix(self, data):
+        """
+        Compute confusion matrix to evaluate the accuracy of a model.
+
+        By definition a confusion matrix C is such that C_{i, j} is equal to the
+        number of observations known to be in group i but predicted to be in
+        group j.
+
+        Parameters
+        ----------
+        data : pandas dataframe.
+            The dataset in long format used to evaluate the model.
+
+        Returns
+        -------
+        confusion_matrix : pandas dataframe.
+            Dataframe containing the confusion matrix. The columns represents
+            the predicted alternatives, whereas the rows represents the true or
+            actual alternatives.
+        """
+        # Check the validity of the parameters
+        ensure_columns_are_in_dataframe([self.obs_id_col,
+                                         self.alt_id_col,
+                                         self.choice_col],
+                                        data,
+                                        data_title='data')
+
+        # List of different alternatives in data
+        alternatives = list(data[self.alt_id_col].unique())
+        # Total number of alternatives
+        n_alternatives = len(alternatives)
+
+        confusion_matrix = pd.DataFrame(data=np.zeros((n_alternatives, n_alternatives)),
+                                        columns=alternatives,
+                                        index=alternatives,
+                                        dtype=np.int)
+
+        # Append to data the predicted alternatives per observation
+        predictions = self._dataframe_with_predictions(data)
+
+        # Iterate over all observations in data
+        obs = list(predictions[self.obs_id_col].unique())
+        for ob in obs:
+            ob_prediction = predictions[predictions[self.obs_id_col] == ob]
+            pred_alt = ob_prediction[ob_prediction['predicted'] == 1][self.alt_id_col]
+            actual_alt = ob_prediction[ob_prediction[self.choice_col] == 1][self.alt_id_col]
+
+            confusion_matrix.loc[actual_alt, pred_alt] += 1
+
+        return confusion_matrix
+
+
+    def get_utility(self, data):
+        """
+        Calculate the systematic utility for each alternative for each
+        individual for a given dataframe.
+
+        Parameters
+        ----------
+        data : pandas dataframe.
+            It should be a long format data for the choice model. Note that
+            long format has one row per available alternative for each
+            observation. The data should include all of the same columns as the
+            original data used to construct (fit) the choice model, with the
+            sole exception of the "intercept" column. If needed the "intercept"
+            column will be dynamically created.
+
+        Returns
+        -------
+        numpy array.
+            1D numpy array with one element per observation per available
+            alternative for that observation. Each element is the calculated
+            systematic utility for that alternative and individual.
+
+            Given J alternatives, to get the systematic utility of alternative
+            j and individual n, the (J*n + j) element of the array should be
+            considered.
+        """
+        # Add an intercept column to the data if necessary based on the model
+        # specification
+        add_intercept_to_dataframe(self.specification, data)
+
+        # Create a new design matrix based on the input data
+        design_matrix = create_design_matrix(data, self.specification, \
+            self.alt_id_col)[0]
+        # Get the systematic utilities by multiplying the design matrix by the
+        # model coefficients
+        sys_utilities = design_matrix.dot(self.coefs.values)
+
+        return sys_utilities
+
 
     def to_pickle(self, filepath):
         """

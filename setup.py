@@ -1,8 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Created on Mon Mar 14 15:54:51 2016
-
-@author: timothyb0912
+@author: José Ángel Martín Baos
 """
 
 # Always prefer setuptools over distutils
@@ -18,22 +16,23 @@ with open(path.join(here, 'README.rst'), encoding='utf-8') as f:
     long_description = f.read()
 
 setup(
-    name='pylogit',
+    name='pykernellogit',
 
     # Versions should comply with PEP440.  For a discussion on single-sourcing
     # the version across setup.py and the project code, see
     # https://packaging.python.org/en/latest/single_source_version.html
-    version='0.2.2',
+    version='0.1.1',
 
-    description='Maximum likelihood estimation of conditional logit models',
+    description='Maximum likelihood estimation of conditional logit models  \
+        using Kernel Logistic Regression (KLR)',
     long_description=long_description,
 
     # The project's main homepage.
-    url='http://github.com/timothyb0912/pylogit',
+    url='https://github.com/JoseAngelMartinB/PyKernelLogit',
 
     # Author details
-    author='Timothy Brathwaite',
-    author_email='timothyb0912@berkeley.edu',
+    author='José Ángel Martín Baos',
+    author_email='JoseAngel.Martin@uclm.es',
 
     # Choose your license
     license='BSD License',
@@ -44,7 +43,7 @@ setup(
         #   3 - Alpha
         #   4 - Beta
         #   5 - Production/Stable
-        'Development Status :: 2 - Pre-Alpha',
+        'Development Status :: 3 - Alpha',
 
         # Indicate the environment the project is to be used in
         'Environment :: Console',
@@ -68,7 +67,8 @@ setup(
     ],
 
     # What does your project relate to?
-    keywords='conditional logit discrete choice econometrics',
+    keywords='conditional logit discrete choice econometrics KLR kernel \
+        logistic regression machine learning',
 
     # Is your project is safe to be zipped?
     zip_safe=True,
@@ -85,12 +85,14 @@ setup(
     # your project is installed. For an analysis of "install_requires" vs pip's
     # requirements files see:
     # https://packaging.python.org/en/latest/requirements.html
-    install_requires=['pandas >= 0.16.2',
-                      'numpy >= 1.10.2',
-                      'scipy >= 0.16.1',
-                      'future >= 0.16',
-                      'statsmodels >= 0.6.1',
-                      'tqdm >= 4.15.0'],
+    install_requires=['pandas>=0.16.2',
+                      'numpy>=1.10.2',
+                      'scipy>=0.16.1',
+                      'future>=0.16',
+                      'statsmodels>=0.6.1',
+                      'tqdm>=4.15.0',
+                      'scikit-learn >= 0.19.0',
+                      'tqdm >= 4.20.0'],
 
     # List additional groups of dependencies here (e.g. development
     # dependencies). You can install these using the following syntax,
