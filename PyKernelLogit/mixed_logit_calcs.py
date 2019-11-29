@@ -248,7 +248,8 @@ def calc_mixed_log_likelihood(params,
                               rows_to_mixers,
                               choice_vector,
                               utility_transform,
-                              ridge=None,
+                              PMLE=None,
+                              PMLE_lambda=0,
                               weights=None):
     """
     Parameters
@@ -295,10 +296,14 @@ def calc_mixed_log_likelihood(params,
         given draw of the random coefficients. There should be one column for
         each draw of the random coefficients. There should have one row per
         individual per choice situation per available alternative.
-    ridge : scalar or None, optional.
-        Determines whether or not ridge regression is performed. If a scalar is
-        passed, then that scalar determines the ridge penalty for the
-        optimization. Default = None.
+    PMLE: None or string value: ['LASSO', 'RIDGE' or 'Tikhonov']
+        It determines if a Penalized Maximum Likelihood Estimation should be
+        executed. The value of the parameter determines the type of PMLE. The
+        None value states that no PMLE is executed. Default = None.
+    PMLE_lambda : int, float, long, or None, optional.
+        Lambda parameter for LASSO or ridge regression. It should be an int,
+        float or long and determines the penalty for the optimization.
+        Default = 0.
     weights : 1D ndarray or None.
         Allows for the calculation of weighted log-likelihoods. The weights can
         represent various things. In stratified samples, the weights may be
@@ -342,10 +347,31 @@ def calc_mixed_log_likelihood(params,
     # Adujust for the presence of a ridge estimator. Again, note that we are
     # implicitly assuming that the only model being mixed is the MNL model,
     # such that params == index coefficients.
-    if ridge is None:
+    if PMLE is None:
         return log_likelihood
     else:
-        return log_likelihood - ridge * np.square(params).sum()
+        if PMLE == "LASSO":
+            return log_likelihood - PMLE_lambda * np.absolute(params).sum()
+
+        elif PMLE == "RIDGE":
+            return log_likelihood - PMLE_lambda * np.square(params).sum()
+
+        elif PMLE == "Tikhonov":
+            # TODO: Not implemented.
+            msg = "Tikhonov Penalized Maximum Likelihood Estimation is not yet"
+            msg_2 = "implemented. It would be available in a future version."
+            msg_3 = "\nUse another PMLE type instead or None for no PMLE."
+            total_msg = " ".join([msg_1, msg_2, msg_3])
+            raise ValueError(total_msg)
+
+        else:
+            msg_1 = "Error! {} is not a valid value for PMLE.\n".format(PMLE)
+            msg_2 = "Penalized Maximum Likelihood Estimation (MPLE) only"
+            msg_3 = "implements methods: 'LASSO', 'RIDGE' and 'Tikhonov' (only"
+            msg_4 = "for kernel models)."
+            total_msg = " ".join([msg_1, msg_2, msg_3])
+            raise ValueError(total_msg)
+
 
 
 def calc_mixed_logit_gradient(params,
@@ -356,7 +382,8 @@ def calc_mixed_logit_gradient(params,
                               rows_to_mixers,
                               choice_vector,
                               utility_transform,
-                              ridge=None,
+                              PMLE=None,
+                              PMLE_lambda=0,
                               weights=None):
     """
     Parameters
@@ -403,10 +430,14 @@ def calc_mixed_logit_gradient(params,
         given draw of the random coefficients. There should be one column for
         each draw of the random coefficients. There should have one row per
         individual per choice situation per available alternative.
-    ridge : int, float, long, or None, optional.
-        Determines whether or not ridge regression is performed. If a float is
-        passed, then that float determines the ridge penalty for the
-        optimization. Default = None.
+    PMLE: None or string value: ['LASSO', 'RIDGE' or 'Tikhonov']
+        It determines if a Penalized Maximum Likelihood Estimation should be
+        executed. The value of the parameter determines the type of PMLE. The
+        None value states that no PMLE is executed. Default = None.
+    PMLE_lambda : int, float, long, or None, optional.
+        Lambda parameter for LASSO or ridge regression. It should be an int,
+        float or long and determines the penalty for the optimization.
+        Default = 0.
     weights : 1D ndarray or None.
         Allows for the calculation of weighted log-likelihoods. The weights can
         represent various things. In stratified samples, the weights may be
@@ -469,8 +500,28 @@ def calc_mixed_logit_gradient(params,
     gradient = gradient.mean(axis=0)
 
     # Account for the ridge parameter if an L2 penalization is being performed
-    if ridge is not None:
-        gradient -= 2 * ridge * params
+    if PMLE is not None:
+        if PMLE == "LASSO":
+            gradient -= 2 * PMLE_lambda * np.sign(params)
+
+        elif PMLE == "RIDGE":
+            gradient -= 2 * PMLE_lambda * params
+
+        elif PMLE == "Tikhonov":
+            # TODO: Not implemented.
+            msg = "Tikhonov Penalized Maximum Likelihood Estimation is not yet"
+            msg_2 = "implemented. It would be available in a future version."
+            msg_3 = "\nUse another PMLE type instead or None for no PMLE."
+            total_msg = " ".join([msg_1, msg_2, msg_3])
+            raise ValueError(total_msg)
+
+        else:
+            msg_1 = "Error! {} is not a valid value for PMLE.\n".format(PMLE)
+            msg_2 = "Penalized Maximum Likelihood Estimation (MPLE) only"
+            msg_3 = "implements methods: 'LASSO', 'RIDGE' and 'Tikhonov' (only"
+            msg_4 = "for kernel models)."
+            total_msg = " ".join([msg_1, msg_2, msg_3])
+            raise ValueError(total_msg)
 
     return gradient.ravel()
 
@@ -484,7 +535,8 @@ def calc_neg_log_likelihood_and_neg_gradient(beta,
                                              choice_vector,
                                              utility_transform,
                                              constrained_pos,
-                                             ridge=None,
+                                             PMLE=None,
+                                             PMLE_lambda=0,
                                              weights=None,
                                              *args):
     """
@@ -536,10 +588,14 @@ def calc_neg_log_likelihood_and_neg_gradient(beta,
         Each int denotes a position in the array of estimated parameters that
         are not to change from their initial values. None of the integers
         should be greater than `beta.size`.
-    ridge : int, float, long, or None, optional.
-        Determines whether or not ridge regression is performed. If a float is
-        passed, then that float determines the ridge penalty for the
-        optimization. Default = None.
+    PMLE: None or string value: ['LASSO', 'RIDGE' or 'Tikhonov']
+        It determines if a Penalized Maximum Likelihood Estimation should be
+        executed. The value of the parameter determines the type of PMLE. The
+        None value states that no PMLE is executed. Default = None.
+    PMLE_lambda : int, float, long, or None, optional.
+        Lambda parameter for LASSO or ridge regression. It should be an int,
+        float or long and determines the penalty for the optimization.
+        Default = 0.
     weights : 1D ndarray or None.
         Allows for the calculation of weighted log-likelihoods. The weights can
         represent various things. In stratified samples, the weights may be
@@ -565,7 +621,8 @@ def calc_neg_log_likelihood_and_neg_gradient(beta,
                                                         rows_to_mixers,
                                                         choice_vector,
                                                         utility_transform,
-                                                        ridge=ridge,
+                                                        PMLE=None,
+                                                        PMLE_lambda=0,
                                                         weights=weights)
 
     neg_beta_gradient_vec = -1 * calc_mixed_logit_gradient(beta,
@@ -576,7 +633,8 @@ def calc_neg_log_likelihood_and_neg_gradient(beta,
                                                            rows_to_mixers,
                                                            choice_vector,
                                                            utility_transform,
-                                                           ridge=ridge,
+                                                           PMLE=None,
+                                                           PMLE_lambda=0,
                                                            weights=weights)
 
     if constrained_pos is not None:
@@ -593,7 +651,8 @@ def calc_bhhh_hessian_approximation_mixed_logit(params,
                                                 rows_to_mixers,
                                                 choice_vector,
                                                 utility_transform,
-                                                ridge=None,
+                                                PMLE=None,
+                                                PMLE_lambda=0,
                                                 weights=None):
     """
     Parameters
@@ -640,10 +699,14 @@ def calc_bhhh_hessian_approximation_mixed_logit(params,
         given draw of the random coefficients. There should be one column for
         each draw of the random coefficients. There should have one row per
         individual per choice situation per available alternative.
-    ridge : int, float, long, or None, optional.
-        Determines whether or not ridge regression is performed. If a float is
-        passed, then that float determines the ridge penalty for the
-        optimization. Default = None.
+    PMLE: None or string value: ['LASSO', 'RIDGE' or 'Tikhonov']
+        It determines if a Penalized Maximum Likelihood Estimation should be
+        executed. The value of the parameter determines the type of PMLE. The
+        None value states that no PMLE is executed. Default = None.
+    PMLE_lambda : int, float, long, or None, optional.
+        Lambda parameter for LASSO or ridge regression. It should be an int,
+        float or long and determines the penalty for the optimization.
+        Default = 0.
     weights : 1D ndarray or None, optional.
         Allows for the calculation of weighted log-likelihoods. The weights can
         represent various things. In stratified samples, the weights may be
@@ -709,8 +772,38 @@ def calc_bhhh_hessian_approximation_mixed_logit(params,
     bhhh_matrix =\
         gradient_per_obs.T.dot(weights_per_obs[:, None] * gradient_per_obs)
 
-    if ridge is not None:
-        bhhh_matrix -= 2 * ridge
+    if PMLE is not None:
+        # The rational behind adding 2 * ridge is that the information
+        # matrix should approximate the hessian and in the hessian we subtract
+        # 2 * ridge at the end. We add 2 * ridge here, since we will multiply
+        # by negative one afterwards. I don't know if this is the correct way
+        # to calculate the Fisher Information Matrix in ridge regression
+        # models.
+        bhhh_matrix += 2 * ridge
+
+        if PMLE == "LASSO":
+            # TODO: I'm not sure about this
+            # Do nothing
+            pass
+
+        elif PMLE == "RIDGE":
+            bhhh_matrix -= 2 * PMLE_lambda
+
+        elif PMLE == "Tikhonov":
+            # TODO: Not implemented.
+            msg = "Tikhonov Penalized Maximum Likelihood Estimation is not yet"
+            msg_2 = "implemented. It would be available in a future version."
+            msg_3 = "\nUse another PMLE type instead or None for no PMLE."
+            total_msg = " ".join([msg_1, msg_2, msg_3])
+            raise ValueError(total_msg)
+
+        else:
+            msg_1 = "Error! {} is not a valid value for PMLE.\n".format(PMLE)
+            msg_2 = "Penalized Maximum Likelihood Estimation (MPLE) only"
+            msg_3 = "implements methods: 'LASSO', 'RIDGE' and 'Tikhonov' (only"
+            msg_4 = "for kernel models)."
+            total_msg = " ".join([msg_1, msg_2, msg_3])
+            raise ValueError(total_msg)
 
     # Note the "-1" is because we are approximating the Fisher information
     # matrix which has a negative one in the front of it?

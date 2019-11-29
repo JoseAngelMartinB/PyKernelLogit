@@ -189,11 +189,14 @@ class MixedEstimator(EstimationObj):
         format dataframe to various other objects such as the available
         alternatives, the unique observations, etc. The keys that it must have
         are `['rows_to_obs', 'rows_to_alts', 'chosen_row_to_obs']`
-    ridge : int, float, long, or None.
-            Determines whether or not ridge regression is performed. If a
-            scalar is passed, then that scalar determines the ridge penalty for
-            the optimization. The scalar should be greater than or equal to
-            zero..
+    PMLE: None or string value: ['LASSO', 'RIDGE' or 'Tikhonov']
+        It determines if a Penalized Maximum Likelihood Estimation should be
+        executed. The value of the parameter determines the type of PMLE. The
+        None value states that no PMLE is executed. Default = None.
+    PMLE_lambda : int, float, long, or None, optional.
+        Lambda parameter for LASSO or ridge regression. It should be an int,
+        float or long and determines the penalty for the optimization.
+        Default = 0.
     zero_vector : 1D ndarray.
         Determines what is viewed as a "null" set of parameters. It is
         explicitly passed because some parameters (e.g. parameters that must be
@@ -221,14 +224,16 @@ class MixedEstimator(EstimationObj):
     def __init__(self,
                  model_obj,
                  mapping_dict,
-                 ridge,
+                 PMLE,
+                 PMLE_lambda,
                  zero_vector,
                  split_params,
                  constrained_pos=None,
                  weights=None):
         super(MixedEstimator, self).__init__(model_obj,
                                              mapping_dict,
-                                             ridge,
+                                             PMLE,
+                                             PMLE_lambda,
                                              zero_vector,
                                              split_params,
                                              constrained_pos=constrained_pos,
@@ -302,7 +307,9 @@ class MixedEstimator(EstimationObj):
                 self.choice_vector,
                 self.utility_transform]
 
-        kwargs = {"ridge": self.ridge, "weights": self.weights}
+        kwargs = {"PMLE": self.PMLE,
+                  "PMLE_lambda": self.PMLE_lambda,
+                  "weights": self.weights}
         log_likelihood = general_log_likelihood(*args, **kwargs)
 
         return log_likelihood
@@ -322,7 +329,10 @@ class MixedEstimator(EstimationObj):
                 self.choice_vector,
                 self.utility_transform]
 
-        return general_gradient(*args, ridge=self.ridge, weights=self.weights)
+        return general_gradient(*args,
+                                PMLE=self.PMLE,
+                                PMLE_lambda=self.PMLE_lambda,
+                                weights=self.weights)
 
     def convenience_calc_hessian(self, params):
         """
@@ -342,8 +352,10 @@ class MixedEstimator(EstimationObj):
                 self.choice_vector,
                 self.utility_transform]
 
-        approx_hess =\
-            general_bhhh(*args, ridge=self.ridge, weights=self.weights)
+        approx_hess = general_bhhh(*args,
+                                   PMLE=self.PMLE,
+                                   PMLE_lambda=self.PMLE_lambda,
+                                   weights=self.weights)
 
         # Account for the constrained position when presenting the results of
         # the approximate hessian.
@@ -498,7 +510,8 @@ class MixedLogit(base_mcm.MNDC_Model):
                 loss_tol=1e-06,
                 gradient_tol=1e-06,
                 maxiter=1000,
-                ridge=None,
+                PMLE=None,
+                PMLE_lambda=0,
                 just_point=False,
                 **kwargs):
         """
@@ -539,10 +552,14 @@ class MixedLogit(base_mcm.MNDC_Model):
             Denotes the maximum number of iterations of the algorithm specified
             by `method` that will be used to estimate the parameters of the
             given model. Default == 1000.
-        ridge : int, float, long, or None, optional.
-            Determines whether or not ridge regression is performed. If a float
-            is passed, then that float determines the ridge penalty for the
-            optimization. Default = None.
+        PMLE: None or string value: ['LASSO', 'RIDGE' or 'Tikhonov']
+            It determines if a Penalized Maximum Likelihood Estimation should be
+            executed. The value of the parameter determines the type of PMLE. The
+            None value states that no PMLE is executed. Default = None.
+        PMLE_lambda : int, float, long, or None, optional.
+            Lambda parameter for LASSO or ridge regression. It should be an int,
+            float or long and determines the penalty for the optimization.
+            Default = 0.
         just_point : bool, optional.
             Determines whether (True) or not (False) calculations that are non-
             critical for obtaining the maximum likelihood point estimate will
@@ -563,10 +580,11 @@ class MixedLogit(base_mcm.MNDC_Model):
         # Store the optimization method
         self.optimization_method = method
 
-        # Store the ridge parameter
-        self.ridge_param = ridge
+        # Store the PMLE parameters
+        self.PMLE = PMLE
+        self.PMLE_lambda = PMLE_lambda
 
-        if ridge is not None:
+        if PMLE is not None:
             warnings.warn(_ridge_warning_msg)
 
         # Construct the mappings from alternatives to observations and from
@@ -591,7 +609,8 @@ class MixedLogit(base_mcm.MNDC_Model):
         zero_vector = np.zeros(init_vals.shape)
         mixl_estimator = MixedEstimator(self,
                                         mapping_res,
-                                        ridge,
+                                        PMLE,
+                                        PMLE_lambda,
                                         zero_vector,
                                         split_param_vec,
                                         constrained_pos=constrained_pos)

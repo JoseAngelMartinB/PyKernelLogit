@@ -269,7 +269,8 @@ def calc_nested_log_likelihood(nest_coefs,
                                rows_to_obs,
                                rows_to_nests,
                                choice_vector,
-                               ridge=None,
+                               PMLE=None,
+                               PMLE_lambda=0,
                                weights=None,
                                *args,
                                **kwargs):
@@ -306,10 +307,14 @@ def calc_nested_log_likelihood(nest_coefs,
         per observation per available alternative for the given observation.
         Elements denote the alternative which is chosen by the given
         observation with a 1 and a zero otherwise.
-    ridge : int, float, long, or None, optional.
-        Determines whether or not ridge regression is performed. If an int,
-        float or long is passed, then that scalar determines the ridge penalty
-        for the optimization. Default = None.
+    PMLE: None or string value: ['LASSO', 'RIDGE' or 'Tikhonov']
+        It determines if a Penalized Maximum Likelihood Estimation should be
+        executed. The value of the parameter determines the type of PMLE. The
+        None value states that no PMLE is executed. Default = None.
+    PMLE_lambda : int, float, long, or None, optional.
+        Lambda parameter for LASSO or ridge regression. It should be an int,
+        float or long and determines the penalty for the optimization.
+        Default = 0.
     weights : 1D ndarray or None, optional.
         Allows for the calculation of weighted log-likelihoods. The weights can
         represent various things. In stratified samples, the weights may be
@@ -340,14 +345,34 @@ def calc_nested_log_likelihood(nest_coefs,
     # Calculate the log likelihood
     log_likelihood = choice_vector.dot(weights * np.log(long_probs))
 
-    if ridge is None:
+    if PMLE is None:
         return log_likelihood
     else:
         # Note that the 1.0 is used since the 'null' nest coefficient is equal
         # to 1.0.
         params = np.concatenate(((nest_coefs - 1.0), index_coefs), axis=0)
 
-        return log_likelihood - ridge * np.square(params).sum()
+        if PMLE == "LASSO":
+            return log_likelihood - PMLE_lambda * np.absolute(params).sum()
+
+        elif PMLE == "RIDGE":
+            return log_likelihood - PMLE_lambda * np.square(params).sum()
+
+        elif PMLE == "Tikhonov":
+            # TODO: Not implemented.
+            msg = "Tikhonov Penalized Maximum Likelihood Estimation is not yet"
+            msg_2 = "implemented. It would be available in a future version."
+            msg_3 = "\nUse another PMLE type instead or None for no PMLE."
+            total_msg = " ".join([msg_1, msg_2, msg_3])
+            raise ValueError(total_msg)
+
+        else:
+            msg_1 = "Error! {} is not a valid value for PMLE.\n".format(PMLE)
+            msg_2 = "Penalized Maximum Likelihood Estimation (MPLE) only"
+            msg_3 = "implements methods: 'LASSO', 'RIDGE' and 'Tikhonov' (only"
+            msg_4 = "for kernel models)."
+            total_msg = " ".join([msg_1, msg_2, msg_3])
+            raise ValueError(total_msg)
 
 
 # Create a function to create the various arrays that are needed when
@@ -503,7 +528,8 @@ def calc_nested_gradient(orig_nest_coefs,
                          choice_vec,
                          rows_to_obs,
                          rows_to_nests,
-                         ridge=None,
+                         PMLE=None,
+                         PMLE_lambda=0,
                          weights=None,
                          use_jacobian=True,
                          *args,
@@ -540,10 +566,14 @@ def calc_nested_gradient(orig_nest_coefs,
         There should be one row per observation per available alternative and
         one column per nest. This matrix maps the rows of the design matrix to
         the unique nests (on the columns).
-    ridge : int, float, long, or None, optional.
-        Determines whether or not ridge regression is performed. If an int,
-        float or long is passed, then that scalar determines the ridge penalty
-        for the optimization. Default `== None`.
+    PMLE: None or string value: ['LASSO', 'RIDGE' or 'Tikhonov']
+        It determines if a Penalized Maximum Likelihood Estimation should be
+        executed. The value of the parameter determines the type of PMLE. The
+        None value states that no PMLE is executed. Default = None.
+    PMLE_lambda : int, float, long, or None, optional.
+        Lambda parameter for LASSO or ridge regression. It should be an int,
+        float or long and determines the penalty for the optimization.
+        Default = 0.
     weights : 1D ndarray or None.
         Allows for the calculation of weighted log-likelihoods. The weights can
         represent various things. In stratified samples, the weights may be
@@ -664,14 +694,34 @@ def calc_nested_gradient(orig_nest_coefs,
     #####
     gradient = np.concatenate((nest_gradient, beta_gradient), axis=1).ravel()
 
-    if ridge is not None:
+    if PMLE is not None:
         # Note that the 20 is used in place of 'infinity' since I would really
         # like to specify the expected value of the nest coefficient to 1, but
         # that would make the logit of the nest parameter infinity. Instead I
         # use 20 as a close enough value-- (1 + exp(-20))**-1 is approx. 1.
         params = np.concatenate(((20 - orig_nest_coefs), index_coefs), axis=0)
 
-        gradient -= 2 * ridge * params
+        if PMLE == "LASSO":
+            gradient -= 2 * PMLE_lambda * np.sign(params)
+
+        elif PMLE == "RIDGE":
+            gradient -= 2 * PMLE_lambda * params
+
+        elif PMLE == "Tikhonov":
+            # TODO: Not implemented.
+            msg = "Tikhonov Penalized Maximum Likelihood Estimation is not yet"
+            msg_2 = "implemented. It would be available in a future version."
+            msg_3 = "\nUse another PMLE type instead or None for no PMLE."
+            total_msg = " ".join([msg_1, msg_2, msg_3])
+            raise ValueError(total_msg)
+
+        else:
+            msg_1 = "Error! {} is not a valid value for PMLE.\n".format(PMLE)
+            msg_2 = "Penalized Maximum Likelihood Estimation (MPLE) only"
+            msg_3 = "implements methods: 'LASSO', 'RIDGE' and 'Tikhonov' (only"
+            msg_4 = "for kernel models)."
+            total_msg = " ".join([msg_1, msg_2, msg_3])
+            raise ValueError(total_msg)
 
     return gradient
 
@@ -685,7 +735,8 @@ def calc_bhhh_hessian_approximation(orig_nest_coefs,
                                     choice_vec,
                                     rows_to_obs,
                                     rows_to_nests,
-                                    ridge=None,
+                                    PMLE=None,
+                                    PMLE_lambda=0,
                                     weights=None,
                                     use_jacobian=True,
                                     *args,
@@ -722,12 +773,14 @@ def calc_bhhh_hessian_approximation(orig_nest_coefs,
         There should be one row per observation per available alternative and
         one column per nest. This matrix maps the rows of the design matrix to
         the unique nests (on the columns).
-    ridge : int, float, long, or None, optional.
-        Determines whether or not ridge regression is performed. If an int,
-        float or long is passed, then that scalar determines the ridge penalty
-        for the optimization. Default == None. Note that if this parameter is
-        passed, the values of the BHHH matrix MAY BE INCORRECT since it is not
-        100% clear how penalization affects the information matrix.
+    PMLE: None or string value: ['LASSO', 'RIDGE' or 'Tikhonov']
+        It determines if a Penalized Maximum Likelihood Estimation should be
+        executed. The value of the parameter determines the type of PMLE. The
+        None value states that no PMLE is executed. Default = None.
+    PMLE_lambda : int, float, long, or None, optional.
+        Lambda parameter for LASSO or ridge regression. It should be an int,
+        float or long and determines the penalty for the optimization.
+        Default = 0.
     use_jacobian : bool, optional.
         Determines whether or not the jacobian will be used when calculating
         the gradient. When performing model estimation, `use_jacobian` should
@@ -854,7 +907,7 @@ def calc_bhhh_hessian_approximation(orig_nest_coefs,
     bhhh_matrix =\
         gradient_matrix.T.dot(weights_per_obs[:, None] * gradient_matrix)
 
-    if ridge is not None:
+    if PMLE is not None:
         # The rational behind adding 2 * ridge is that the information
         # matrix should approximate the hessian and in the hessian we subtract
         # 2 * ridge at the end. We add 2 * ridge here, since we will multiply
@@ -862,6 +915,30 @@ def calc_bhhh_hessian_approximation(orig_nest_coefs,
         # to calculate the Fisher Information Matrix in ridge regression
         # models.
         bhhh_matrix += 2 * ridge
+
+        if PMLE == "LASSO":
+            # TODO: I'm not sure about this
+            # Do nothing
+            pass
+
+        elif PMLE == "RIDGE":
+            bhhh_matrix -= 2 * PMLE_lambda
+
+        elif PMLE == "Tikhonov":
+            # TODO: Not implemented.
+            msg = "Tikhonov Penalized Maximum Likelihood Estimation is not yet"
+            msg_2 = "implemented. It would be available in a future version."
+            msg_3 = "\nUse another PMLE type instead or None for no PMLE."
+            total_msg = " ".join([msg_1, msg_2, msg_3])
+            raise ValueError(total_msg)
+
+        else:
+            msg_1 = "Error! {} is not a valid value for PMLE.\n".format(PMLE)
+            msg_2 = "Penalized Maximum Likelihood Estimation (MPLE) only"
+            msg_3 = "implements methods: 'LASSO', 'RIDGE' and 'Tikhonov' (only"
+            msg_4 = "for kernel models)."
+            total_msg = " ".join([msg_1, msg_2, msg_3])
+            raise ValueError(total_msg)
 
     # Note the "-1" is because we are approximating the Fisher information
     # matrix which has a negative one in the front of it?

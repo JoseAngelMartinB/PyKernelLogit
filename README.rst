@@ -12,6 +12,12 @@ functions to estimate indicators such as the Willingness to Pay (WTP) for the
 KLR models.
 
 
+Installation
+*********************
+PyKernelLogit is available for its installation on the Python Package Index at:
+[https://pypi.org/project/pykernellogit/](https://pypi.org/project/pykernellogit/).
+
+
 Authors
 *********************
 PyKernelLogit was developed by José Ángel Martín Baos from the University of
