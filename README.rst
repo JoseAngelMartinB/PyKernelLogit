@@ -15,14 +15,14 @@ KLR models.
 Installation
 *********************
 PyKernelLogit is available for its installation on the Python Package Index at:
-[https://pypi.org/project/pykernellogit/](https://pypi.org/project/pykernellogit/).
+https://pypi.org/project/pykernellogit/.
 
 
 Authors
 *********************
 PyKernelLogit was developed by José Ángel Martín Baos from the University of
-Castilla-La Mancha (JoseAngel.Martin@uclm.es) based on the package PyLogit
-([https://github.com/timothyb0912/pylogit](https://github.com/timothyb0912/pylogit))
+Castilla-La Mancha (JoseAngel.Martin@uclm.es) based on the package PyLogit 
+(https://github.com/timothyb0912/pylogit)
 developed by Timothy Brathwaite.
 
 License
