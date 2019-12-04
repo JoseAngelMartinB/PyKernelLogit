@@ -541,8 +541,18 @@ class NestedLogit(base_mcm.MNDC_Model):
             fixed_params.extend(constrained_pos)
         final_constrained_pos = sorted(list(set(fixed_params)))
 
+
+        num_nests = len(self.nest_spec) # Obtain the number of nests
+        # Set the initial vector of the nest parameters to 40. Note that the 40
+        # corresponds to scale parameter that is numericalle indistinguishable
+        # from 1.0
+        nest_initial_vector = np.ones(num_nests)*40
+        initial_parm_vector = np.zeros(init_vals.shape[0] - num_nests)
+
         # Create the estimation object
-        zero_vector = np.zeros(init_vals.shape)
+        zero_vector = np.concatenate((nest_initial_vector, initial_parm_vector),
+                                     axis=0)
+
         estimator_args = [self,
                           mapping_res,
                           PMLE,
