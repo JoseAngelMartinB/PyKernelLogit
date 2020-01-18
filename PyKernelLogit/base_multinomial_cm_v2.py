@@ -2039,8 +2039,6 @@ class MNDC_Model(object):
                 (predictions['predicted'] == 1), self.alt_id_col])
             selected = random.randint(0, len(sel_alts)-1)
 
-            print("--- id: %d , sel_alt: %s, selected: %d --- %d" %( idx, str(sel_alts), selected, sel_alts[selected]))
-
             predictions.loc[(predictions[self.obs_id_col] == idx) & \
                 (predictions[self.alt_id_col].isin(sel_alts)), 'predicted'] = 0
 
