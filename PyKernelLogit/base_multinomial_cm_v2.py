@@ -20,6 +20,7 @@ import pickle
 from copy import deepcopy
 from functools import reduce
 from numbers import Number
+import random
 
 import scipy.linalg
 import scipy.stats
@@ -2025,6 +2026,26 @@ class MNDC_Model(object):
         # alternative was predected by the model or 0 in other case
         predictions['predicted'] = 0
         predictions.loc[idx_higher_prob, 'predicted'] = 1
+
+        # Get all the observations where more than 1 alternative can be selected
+        # as all have the same probability
+        sum_selected = predictions.groupby(self.obs_id_col,as_index=False)['predicted'].sum()
+        mult_choice = sum_selected.loc[sum_selected['predicted'] > 1, self.obs_id_col]
+
+        # For each of the observations with more than 1 selected alternative,
+        # select one of them randomly.
+        for idx in mult_choice:
+            sel_alts = list(predictions.loc[(predictions[self.obs_id_col] == idx) & \
+                (predictions['predicted'] == 1), self.alt_id_col])
+            selected = random.randint(0, len(sel_alts)-1)
+
+            print("--- id: %d , sel_alt: %s, selected: %d --- %d" %( idx, str(sel_alts), selected, sel_alts[selected]))
+
+            predictions.loc[(predictions[self.obs_id_col] == idx) & \
+                (predictions[self.alt_id_col].isin(sel_alts)), 'predicted'] = 0
+
+            predictions.loc[(predictions[self.obs_id_col] == idx) & \
+                (predictions[self.alt_id_col] == sel_alts[selected]), 'predicted'] = 1
 
         return predictions
 
