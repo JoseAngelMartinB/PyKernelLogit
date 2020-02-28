@@ -553,7 +553,8 @@ def kernel_utility_function_WTP(WTP_vars,
                                 variables,
                                 Z,
                                 kernel_type,
-                                scaler):
+                                scaler = None,
+                                scaled_fetures = None):
     """
     Returns the systematic utility of the selected alternative for a certain
     observation in long format using a kernel model to be used when computing
@@ -598,6 +599,9 @@ def kernel_utility_function_WTP(WTP_vars,
         here. The provided scaler must contain a `transform` function which
         scale the features of the dataset according to the scaler definition.
         It is recommended to use any scaler from sklearn.preprocessing module.
+    scaled_fetures : None or list, optional.
+        If a scaler is provided, `scaled_features` should be a list containing
+        the column names of the scaled variables.
 
     Returns
     -------
@@ -605,8 +609,11 @@ def kernel_utility_function_WTP(WTP_vars,
         The systematic utility of the selected alternative for the observation
         provided in `ẀTP_vars` and `ẀTP_point`.
     """
-    if not hasattr(scaler, 'transform'):
+    if not (scaler is None) and (not hasattr(scaler, 'transform')):
         raise ValueError("scaler instance must have a transform() method.")
+        
+    if not (scaler is None) and (scaled_fetures is None):
+        raise ValueError("scaled_features has not been specified.")
 
     # Insert the new values `WTP_vars` into `WTP_point`
     WTP_point = WTP_point.copy()
@@ -614,9 +621,8 @@ def kernel_utility_function_WTP(WTP_vars,
                   [WTP_cost_column, WTP_x_column]] = WTP_vars
 
     # Apply scale to `WTP_point` dataframe if necessary
-    if scaler is not None:
-        WTP_point[[WTP_cost_column, WTP_x_column]] = scaler.transform(
-            WTP_point[[WTP_cost_column, WTP_x_column]])
+    if not (scaler is None):
+        WTP_point[scaled_fetures] = scaler.transform(WTP_point[scaled_fetures])
 
     # Obtain the long format kernel matrix for `WTP_point`
     K_WTP = long_format_with_kernel_matrix(WTP_point,
@@ -646,6 +652,7 @@ def calculate_WTP_kernel(WTP_cost_column,
                          Z = None,
                          kernel_type = "RBF",
                          scaler = None,
+                         scaled_fetures = None,
                          epsilon = None):
     """
     Calculate the willingness to pay (WTP) indicator for an observation provided
@@ -691,6 +698,9 @@ def calculate_WTP_kernel(WTP_cost_column,
         here. The provided scaler must contain a `transform` function which
         scale the features of the dataset according to the scaler definition.
         It is recommended to use any scaler from sklearn.preprocessing module.
+    scaled_fetures : None or list, optional.
+        If a scaler is provided, `scaled_features` should be a list containing
+        the column names of the scaled variables.
     epsilon : array_like or None, optional.
         Increment to the objective function to use for determining the function
         gradient. If None (recommended), then the square root of the minimum
@@ -716,7 +726,7 @@ def calculate_WTP_kernel(WTP_cost_column,
     if epsilon is not None and not isinstance(epsilon, float):
         raise ValueError("epsilon must be None or float.")
 
-    if not hasattr(scaler, 'transform'):
+    if not (scaler is None) and (not hasattr(scaler, 'transform')):
         raise ValueError("scaler instance must have a transform() method.")
 
     # Set `WTP_vars`, which is a list with the values of the `WTP_cost_column`
@@ -743,7 +753,8 @@ def calculate_WTP_kernel(WTP_cost_column,
                                   variables,
                                   Z,
                                   kernel_type,
-                                  scaler)
+                                  scaler,
+                                  scaled_fetures)
 
     try:
         # Calculate the WTP value: WTP = - gradient(x)/gradient(cost)
